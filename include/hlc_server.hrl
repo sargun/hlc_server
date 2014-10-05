@@ -1,0 +1,1 @@
+-record(hlc_clock, {logical_clock = 0, event_clock = 0}).
