@@ -8,7 +8,8 @@
 
 -record(state, {hlc_clock}).
 
--define(MAX_OUT_OF_BOUNDS, 500). %If an event is 500 microseconds in the future, then tell it to fuck right off.
+%% If an event is 500000 (500 ms) microseconds in the future, then tell it to fuck right off.
+-define(MAX_OUT_OF_BOUNDS, 500000). 
 start_link() ->
 	gen_server:start({local, ?MODULE}, ?MODULE, [], []).
 
@@ -18,11 +19,17 @@ init(_Args) ->
 	ok = timer:start(),
 	pg2:create(hlc_server),
 	random:seed(os:timestamp()),
-	State = #state{hlc_clock = #hlc_clock{logical_clock = timestamp()}},
-	timer:send_interval(1000 + random:uniform(5000), tick), 
-	NewState = tick(State),
-	pg2:join(hlc_server, self()),
-	{ok, NewState}.
+	case hlc_server_time:pt() of 
+		{ok, Timestamp} ->
+			State = #state{hlc_clock = #hlc_clock{logical_clock = Timestamp}},
+			timer:send_interval(1000 + random:uniform(5000), tick), 
+			NewState = tick(State),
+			pg2:join(hlc_server, self()),
+			{ok, NewState};
+		Error ->
+			{stop, {bad_clock, Error}}
+	end.
+
 
 bootstrap() ->
 	% This should move to a gossip mechanism... or something less terrible than O(N**2)
@@ -31,8 +38,14 @@ bootstrap() ->
 	ok.
 
 timestamp() ->
-	{Mega, Secs, Micro} = os:timestamp(),
-  Mega*1000*1000*1000*1000 + Secs * 1000 * 1000 + Micro.
+	case hlc_server_time:pt() of
+		{ok, Timestamp} ->
+			Timestamp;
+		%% This only works, because wherever we're taking the value of timestamp
+		%% we're also comparing it to the last clock we saw. 
+		_Else ->
+			0 
+	end.
 
 handle_cast({bootstrap, RemotePid}, State) ->
 	NewClock = get_clock(State),
