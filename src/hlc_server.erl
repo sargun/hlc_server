@@ -1,9 +1,9 @@
 -module(hlc_server).
--include_lib("hlc_server/include/hlc_server.hrl").
+-include_lib("hlc_server/include/hlc_server_pb.hrl").
 -behaviour(gen_server).
 
 -export([start_link/0]).
--export([get_clock/0, receive_clock/1, to_int/1]).
+-export([get_clock/0, receive_clock/1, to_int/1, get_diff_ns/2, from_int/1]).
 -export([init/1, handle_call/3, handle_cast/2, terminate/2, handle_info/2, code_change/3]).
 
 -record(state, {hlc_clock}).
@@ -54,7 +54,6 @@ handle_cast({bootstrap, RemotePid}, State) ->
 	{noreply, NewState};
 handle_cast({update_clock, RemoteClock}, State) ->
 	NewClock = receive_clock(RemoteClock, State),
-	io:format("updating from remote ~p clock to: ~p~n", [RemoteClock, NewClock]),
 	NewState = State#state{hlc_clock = NewClock},
 	{noreply, NewState};
 handle_cast({broadcast_clock, RemoteClock}, State) ->
@@ -137,5 +136,14 @@ receive_clock(Clock) ->
 to_int(Clock) ->
 	LogicalClock = Clock#hlc_clock.logical_clock,
 	EventClock = Clock#hlc_clock.event_clock,
-	<<IntClock:128/unsigned-integer>> = <<LogicalClock:64/unsigned-integer, EventClock:64/unsigned-integer>>,
+	<<IntClock:96/unsigned-integer>> = <<LogicalClock:64/unsigned-integer, EventClock:32/unsigned-integer>>,
 	IntClock.
+
+from_int(IntClock) ->
+	<<LogicalClock:64/unsigned-integer, EventClock:32/unsigned-integer>> = <<IntClock:96/unsigned-integer>>,
+	#hlc_clock{logical_clock = LogicalClock, event_clock = EventClock}.
+
+
+get_diff_ns(Clock1, Clock2) ->
+	% Clock2 occurs at least N nanoseconds after Clock1.
+	Clock2#hlc_clock.logical_clock - Clock1#hlc_clock.logical_clock.

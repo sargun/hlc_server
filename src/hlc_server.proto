@@ -1,0 +1,4 @@
+message hlc_clock {
+	required uint64 logical_clock = 500;
+	required uint32 event_clock = 501;
+}
