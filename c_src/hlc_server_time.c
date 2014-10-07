@@ -43,6 +43,15 @@ static ERL_NIF_TERM pt(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
   {
     return ATOM_NOSYNC;
   }
+  // If we're more than 1 seconds off calendar time, abort
+  else if (timex_buf.offset > 1000000)
+  {
+    return ATOM_NOSYNC;
+  }
+  else if (timex_buf.esterror > 1000000)
+  {
+    return ATOM_NOSYNC;
+  }
   else if (!(timex_buf.status & STA_PLL))
   {
     return ATOM_NOSYNC;
@@ -57,6 +66,7 @@ static ERL_NIF_TERM pt(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
     {
       now = now + timex_buf.time.tv_usec * 1000;
     }
+    
     return enif_make_tuple2(env, ATOM_OK, enif_make_uint64(env, now));
   }
 }
